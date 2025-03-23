@@ -5,13 +5,18 @@ import fitz
 import pandas as pd
 import streamlit as st
 import tempfile
-import requests
+import re
 import concurrent.futures
-from typing import Dict, List, Any, Optional
-from functools import lru_cache
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field, asdict
 
 
 STANDARD_SCHEMA = {
+    "policy_metadata": {
+        "company_name": None,
+        "policy_number": None,
+        "policy_effective_date": None,
+    },
     "general_provisions": {
         "eligibility_period": None,
         "definition_of_salary": None,
@@ -27,7 +32,6 @@ STANDARD_SCHEMA = {
     },
     "optional_life_insurance": {
         "available": None,
-        "details": None,
     },
     "dependent_life_insurance": {
         "spouse_amount": None,
@@ -36,30 +40,18 @@ STANDARD_SCHEMA = {
         "termination_age": None,
     },
     "short_term_disability": {
-        "benefit_amount": None,
-        "non_evidence_maximum": None,
-        "overall_maximum": None,
-        "waiting_period": None,
-        "definition_of_disability": None,
-        "maximum_benefit_period": None,
-        "cola": None,
-        "termination_age": None,
-        "taxability_of_benefits": None,
+        "available": None,
     },
     "long_term_disability": {
-        "benefit_amount": None,
-        "non_evidence_maximum": None,
-        "overall_maximum": None,
-        "waiting_period": None,
-        "definition_of_disability": None,
-        "maximum_benefit_period": None,
-        "cola": None,
-        "termination_age": None,
-        "taxability_of_benefits": None,
+        "available": None,
     },
     "critical_illness": {
-        "available": None,
-        "details": None,
+        "policy_number": None,
+        "benefit_amount": None,
+        "covered_conditions": None,
+        "multi_occurrence": None,
+        "dependent_coverage": None,
+        "termination_age": None,
     },
     "health_care": {
         "preferred_provider_arrangement": None,
@@ -72,61 +64,161 @@ STANDARD_SCHEMA = {
         "drug_card": None,
         "hospital": None,
         "in_home_nursing_care": None,
-        "practitioners": None,
+        "psychologist": None,
+        "chiropractor": None,
+        "acupuncture": None,
+        "naturopath_homeopath": None,
+        "physiotherapist": None,
+        "podiatrist": None,
+        "osteopath": None,
+        "speech_therapist": None,
+        "massage_therapist": None,
+        "orthotics_orthopedic_shoes": None,
+        "hearing_aids": None,
+        "gender_affirmation": None,
+        "eye_exams": None,
         "vision_care": None,
         "out_of_province_country_coverage": None,
+        "trip_limitation": None,
+        "termination_age": None,
     },
     "dental_care": {
-        "deductible": None,
-        "co_insurance_basic": None,
-        "co_insurance_major": None,
-        "co_insurance_orthodontics": None,
-        "annual_maximum": None,
-        "lifetime_maximum": None,
-        "recall_exam_frequency": None,
-        "fee_guide": None,
+        "available": None,
     },
     "additional_benefits": {
         "employee_assistance_plan": None,
         "medical_second_opinion_service": None,
         "healthcare_spending_account": None,
         "cost_plus_plan": None,
+        "virtual_healthcare": None,
     },
     "other": {
-        "details": None,
-    },
-    "manulife_vitality": {
-        "available": None,
         "details": None,
     }
 }
 
 
-class AIInsuranceExtractor:
+@dataclass
+class ExtractionResult:
+    """Class to store extraction results with confidence scores"""
+    value: str = None
+    confidence: float = 0.0
+    source: str = None  # Method that found this result
+    context: str = None  # Text surrounding the extracted value
+
+
+class ContextWindowExtractor:
     def __init__(self):
-        self.model_name = "llama3:latest"
-        self.ollama_url = "http://localhost:11434/api/generate"
-        self.cache = {}
         self.max_workers = 4
+        self.context_window_size = 150  # Characters before and after key terms
+        self.field_key_terms = self._initialize_key_terms()
+        self.value_extractors = self._initialize_value_extractors()
         
-    def _check_ollama_available(self):
-        try:
-            response = requests.get("http://localhost:11434/api/tags")
-            if response.status_code != 200:
-                return False
-                
-            models = response.json()
-            
-            if "models" in models:
-                model_list = models.get("models", [])
-                return any(model.get("name") == "llama3" or model.get("name") == "llama3:latest" for model in model_list)
-            else:
-                model_names = [model.get("name", "") for model in models] if isinstance(models, list) else []
-                return "llama3" in model_names or "llama3:latest" in model_names
-        except:
-            return False
+    def _initialize_key_terms(self) -> Dict[str, Dict[str, List[str]]]:
+        """Initialize key terms for each field in the schema"""
+        terms = {}
+        
+        # Policy metadata key terms
+        terms["policy_metadata"] = {
+            "company_name": ["insurance company", "insurer", "carrier", "underwriter", "provider"],
+            "policy_number": ["policy number", "policy #", "policy no", "group number", "certificate"],
+            "policy_effective_date": ["effective date", "policy date", "commencement date", "start date"]
+        }
+        
+        # General provisions key terms
+        terms["general_provisions"] = {
+            "eligibility_period": ["eligibility period", "waiting period", "probationary period", "becomes eligible"],
+            "definition_of_salary": ["definition of salary", "salary definition", "earnings definition", "salary means"],
+            "child_coverage_terminates_at_age": ["child coverage terminates", "dependent coverage ends", "child eligibility ends", "dependent termination age"],
+            "student_extension_to_age": ["student extension", "full-time student", "student coverage", "extended coverage", "student eligibility"]
+        }
+        
+        # Life insurance key terms
+        terms["life_insurance_and_add"] = {
+            "benefit_amount": ["life insurance benefit", "life benefit", "basic life", "life coverage", "death benefit"],
+            "non_evidence_maximum": ["non evidence maximum", "non-evidence limit", "guaranteed issue", "without evidence", "evidence-free maximum"],
+            "overall_maximum": ["overall maximum", "maximum benefit", "coverage maximum", "maximum coverage", "maximum amount"],
+            "reduction_schedule": ["reduction schedule", "benefit reduces", "age reduction", "reduced benefit", "decreases at age"],
+            "termination_age": ["termination age", "coverage terminates", "benefit terminates", "terminates at age", "expires at age"]
+        }
+        
+        # Optional life insurance key terms
+        terms["optional_life_insurance"] = {
+            "available": ["optional life", "voluntary life", "supplemental life", "additional life", "extra life"]
+        }
+        
+        # Dependent life insurance key terms
+        terms["dependent_life_insurance"] = {
+            "spouse_amount": ["spouse amount", "spouse benefit", "spousal coverage", "husband/wife benefit", "partner benefit"],
+            "child_amount": ["child amount", "child benefit", "dependent child", "children's benefit", "minor coverage"],
+            "children_covered_from_age": ["children covered from", "child eligibility", "child coverage begins", "dependent from age", "eligible child age"],
+            "termination_age": ["dependent termination", "dependent coverage ends", "spouse termination", "spouse coverage ends"]
+        }
+        
+        # STD key terms
+        terms["short_term_disability"] = {
+            "available": ["short term disability", "STD", "weekly indemnity", "salary continuance", "sick leave"]
+        }
+        
+        # LTD key terms
+        terms["long_term_disability"] = {
+            "available": ["long term disability", "LTD", "disability income", "income protection", "disability benefit"]
+        }
+        
+        # Critical illness key terms
+        terms["critical_illness"] = {
+            "policy_number": ["critical illness policy", "CI policy number", "critical illness certificate", "CI certificate"],
+            "benefit_amount": ["critical illness benefit", "CI benefit", "critical illness coverage", "CI coverage amount"],
+            "covered_conditions": ["covered conditions", "critical conditions", "covered illnesses", "CI conditions", "covered diagnosis"],
+            "multi_occurrence": ["multi occurrence", "multiple occurrences", "subsequent diagnosis", "recurrence", "multiple claims"],
+            "dependent_coverage": ["dependent critical illness", "dependent CI", "spouse critical illness", "child critical illness"],
+            "termination_age": ["CI terminates", "critical illness terminates", "CI termination age", "CI coverage ends"]
+        }
+        
+        # Health care key terms (partial list - would be expanded for all fields)
+        terms["health_care"] = {
+            "preferred_provider_arrangement": ["preferred provider", "provider network", "pharmacy network", "dispensing network"],
+            "deductible_drugs": ["drug deductible", "pharmacy deductible", "prescription deductible", "medication deductible"],
+            "dispensing_fee_cap": ["dispensing fee cap", "dispensing fee maximum", "fee cap", "pharmacist fee"],
+            # More health care terms would be added here
+            "termination_age": ["health care terminates", "health coverage ends", "medical terminates", "health benefits end"]
+        }
+        
+        # Dental care key terms
+        terms["dental_care"] = {
+            "available": ["dental care", "dental coverage", "dental benefit", "dental plan", "dental insurance"]
+        }
+        
+        # Additional benefits key terms
+        terms["additional_benefits"] = {
+            "employee_assistance_plan": ["employee assistance program", "EAP", "counseling benefit", "employee support"],
+            "medical_second_opinion_service": ["second opinion", "medical second opinion", "expert medical opinion", "specialist consult"],
+            "healthcare_spending_account": ["healthcare spending account", "HSA", "health spending", "flexible spending", "health care account"],
+            "cost_plus_plan": ["cost plus", "cost plus plan", "cost plus arrangement", "cost plus account"],
+            "virtual_healthcare": ["virtual healthcare", "telehealth", "telemedicine", "virtual care", "online doctor"]
+        }
+        
+        # Other section key terms
+        terms["other"] = {
+            "details": ["additional coverage", "additional benefits", "other benefits", "miscellaneous benefits"]
+        }
+        
+        return terms
     
-    def extract_text_from_pdf(self, pdf_path):
+    def _initialize_value_extractors(self) -> Dict[str, re.Pattern]:
+        """Initialize specialized extractors for different value formats"""
+        extractors = {
+            "money": re.compile(r'(\$[\d,\.]+|\d+(?:\.\d+)?[\s]*dollars|\d+(?:\.\d+)?[\s]*cents|\d+(?:\.\d+)?[\s]*\$)'),
+            "percentage": re.compile(r'(\d+(?:\.\d+)?[\s]*(?:percent|pct|%))'),
+            "age": re.compile(r'(\d+)[\s]*(?:years|year|yrs|yr)?[\s]*(?:of age|old)?'),
+            "time_period": re.compile(r'(\d+)[\s]*(?:days?|weeks?|months?|years?)'),
+            "date": re.compile(r'(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s]*\d{1,2}[,.\s]*\d{2,4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}[/.-]\d{1,2}[/.-]\d{1,2})'),
+            "yes_no": re.compile(r'(yes|no|included|not included|available|not available|excluded|covered|not covered)', re.IGNORECASE),
+        }
+        return extractors
+    
+    def extract_text_from_pdf(self, pdf_path: str) -> str:
+        """Extract text from a PDF file"""
         text = ""
         try:
             pdf_document = fitz.open(pdf_path)
@@ -139,7 +231,8 @@ class AIInsuranceExtractor:
             st.error(f"Error extracting text from PDF: {e}")
             return ""
 
-    def chunk_text(self, text, max_chars=6000):
+    def chunk_text(self, text: str, max_chars: int = 10000) -> List[str]:
+        """Split text into manageable chunks"""
         chunks = []
         current_chunk = ""
         paragraphs = text.split("\n\n")
@@ -156,150 +249,169 @@ class AIInsuranceExtractor:
             chunks.append(current_chunk)
             
         return chunks
-    
-    def ai_chunk_text(self, text):
-        if len(text) < 6000:
-            return [text]
+
+    def extract_with_context(self, text: str, section: str, field: str) -> List[ExtractionResult]:
+        """Extract values using context windows around key terms"""
+        results = []
+        
+        # Skip if no key terms for this field
+        if section not in self.field_key_terms or field not in self.field_key_terms[section]:
+            return results
+        
+        key_terms = self.field_key_terms[section][field]
+        
+        for term in key_terms:
+            # Find all occurrences of the term
+            matches = re.finditer(r'\b' + re.escape(term) + r'\b', text, re.IGNORECASE)
             
-        chunks_count = (len(text) // 5000) + 1  
-        max_chunks = min(chunks_count, 10)  # Limit to 10 chunks max
-        
-        prompt = f"""
-        I need to split a large insurance policy document into {max_chunks} meaningful chunks for further processing.
-        Please identify the {max_chunks} most logical break points in the document.
-        Return ONLY the character position numbers where I should split the text, as a JSON array of numbers.
-        For example: [4500, 9000, 13500, 18000]
-        
-        Do not include any explanation, just the JSON array.
-        """
-        
-        try:
-            response = requests.post(
-                self.ollama_url,
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                extracted_text = result.get("response", "").strip()
+            for match in matches:
+                # Extract context window
+                start = max(0, match.start() - self.context_window_size)
+                end = min(len(text), match.end() + self.context_window_size)
+                context = text[start:end]
                 
-                try:
-                    import json
-                    positions = json.loads(extracted_text)
-                    if isinstance(positions, list) and all(isinstance(pos, int) for pos in positions):
-                        chunks = []
-                        start_pos = 0
-                        
-                        for pos in sorted(positions):
-                            if pos > start_pos and pos < len(text):
-                                chunks.append(text[start_pos:pos])
-                                start_pos = pos
-                                
-                        chunks.append(text[start_pos:])
-                        return chunks
-                except:
-                    pass
-        except:
-            pass
-            
-        # Fallback to simple chunking if AI chunking fails
-        return self.chunk_text(text)
-    
-    @lru_cache(maxsize=32)
-    def extract_section_with_ollama(self, chunk_id, section_name):
-        chunk = self.chunk_cache.get(chunk_id, "")
-        if not chunk:
-            return {}
-            
-        if not self._check_ollama_available():
-            st.error("Ollama service not available. Please install and run Ollama first.")
-            return {}
-        
-        display_section = section_name.replace("_", " ").title()
-        fields = STANDARD_SCHEMA.get(section_name, {}).keys()
-        field_list = "\n".join([f"- {field.replace('_', ' ').title()}" for field in fields])
-        
-        prompt = f"""
-        Extract ALL the following fields from the {display_section} section of this insurance policy text.
-        
-        Fields to extract:
-        {field_list}
-        
-        For each field:
-        - If you find an exact value (like '$500,000', '80%', '65 years', etc.), include it
-        - If not found, use null
-        
-        Return ONLY a valid JSON object with the fields as keys.
-        Do not include any explanation or other text outside the JSON object.
-        
-        Insurance policy text:
-        {chunk}
-        """
-        
-        try:
-            response = requests.post(
-                self.ollama_url,
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                extracted_text = result.get("response", "").strip()
+                # Extract value from context
+                value, confidence = self._extract_value_from_context(context, section, field)
                 
-                try:
-                    # First try to parse the entire text as JSON
-                    extracted_data = json.loads(extracted_text)
-                    return extracted_data
-                except json.JSONDecodeError:
-                    # If that fails, try to find a JSON object in the text
-                    start_idx = extracted_text.find('{')
-                    end_idx = extracted_text.rfind('}')
-                    
-                    if start_idx != -1 and end_idx != -1:
-                        json_text = extracted_text[start_idx:end_idx+1]
-                        try:
-                            extracted_data = json.loads(json_text)
-                            return extracted_data
-                        except:
-                            pass
-                    
-                    return {}
-            else:
-                return {}
-                
-        except Exception as e:
-            st.warning(f"Error calling Ollama: {e}")
-            return {}
-    
-    def process_chunk(self, chunk_id, chunk, sections):
-        results = {}
-        
-        self.chunk_cache[chunk_id] = chunk
-        
-        for section_name in sections:
-            section_data = self.extract_section_with_ollama(chunk_id, section_name)
-            
-            if section_name not in results:
-                results[section_name] = {}
-                
-            for field in STANDARD_SCHEMA.get(section_name, {}):
-                field_display = field.replace("_", " ").title()
-                value = section_data.get(field) or section_data.get(field_display)
-                
-                if value and str(value).lower() not in ["none", "null", "n/a", "not found"]:
-                    results[section_name][field] = value
+                if value:
+                    results.append(ExtractionResult(
+                        value=value,
+                        confidence=confidence,
+                        source="context_window",
+                        context=context
+                    ))
         
         return results
-    
-    def merge_results(self, results_list):
+
+    def _extract_value_from_context(self, context: str, section: str, field: str) -> Tuple[Optional[str], float]:
+        """Extract value from context using field-specific logic"""
+        # Determine likely format based on field name
+        format_type = self._determine_format_type(section, field)
+        
+        # Apply format-specific extraction
+        if format_type == "money":
+            return self._extract_monetary_value(context)
+        elif format_type == "percentage":
+            return self._extract_percentage(context)
+        elif format_type == "age":
+            return self._extract_age(context)
+        elif format_type == "time_period":
+            return self._extract_time_period(context)
+        elif format_type == "date":
+            return self._extract_date(context)
+        elif format_type == "yes_no":
+            return self._extract_yes_no(context)
+        else:
+            # General text extraction
+            return self._extract_general_text(context)
+
+    def _determine_format_type(self, section: str, field: str) -> str:
+        """Determine the expected format type based on field name"""
+        field_lower = field.lower()
+        
+        if "amount" in field_lower or "maximum" in field_lower or "deductible" in field_lower:
+            return "money"
+        elif "co_insurance" in field_lower or "percentage" in field_lower:
+            return "percentage"
+        elif "age" in field_lower or "terminates" in field_lower:
+            return "age"
+        elif "period" in field_lower:
+            return "time_period"
+        elif "date" in field_lower:
+            return "date"
+        elif "available" in field_lower:
+            return "yes_no"
+        else:
+            return "text"
+
+    def _extract_monetary_value(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract monetary values from context"""
+        # Look for currency amounts with $ sign or words like "dollars"
+        matches = self.value_extractors["money"].findall(context)
+        if matches:
+            # Return the first match for now - could be improved with proximity analysis
+            return matches[0].strip(), 0.8
+        return None, 0.0
+
+    def _extract_percentage(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract percentage values from context"""
+        matches = self.value_extractors["percentage"].findall(context)
+        if matches:
+            return matches[0].strip(), 0.8
+        return None, 0.0
+
+    def _extract_age(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract age values from context"""
+        matches = self.value_extractors["age"].findall(context)
+        if matches:
+            # Get the number only
+            age = matches[0].strip()
+            if age.isdigit():  # Ensure it's a valid number
+                return f"{age} years", 0.8
+        return None, 0.0
+
+    def _extract_time_period(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract time period values from context"""
+        matches = self.value_extractors["time_period"].findall(context)
+        if matches:
+            return matches[0].strip(), 0.8
+        return None, 0.0
+
+    def _extract_date(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract date values from context"""
+        matches = self.value_extractors["date"].findall(context)
+        if matches:
+            return matches[0].strip(), 0.8
+        return None, 0.0
+
+    def _extract_yes_no(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract yes/no values from context"""
+        matches = self.value_extractors["yes_no"].findall(context)
+        if matches:
+            value = matches[0].lower().strip()
+            # Normalize responses
+            if value in ["yes", "included", "available", "covered"]:
+                return "Yes", 0.9
+            elif value in ["no", "not included", "not available", "excluded", "not covered"]:
+                return "No", 0.9
+        return None, 0.0
+
+    def _extract_general_text(self, context: str) -> Tuple[Optional[str], float]:
+        """Extract general text value from context"""
+        # Look for text after colon or similar delimiters
+        matches = re.search(r'[:=]\s*([^\.;,\n]{1,50})', context)
+        if matches:
+            return matches.group(1).strip(), 0.7
+        
+        # If no clear delimiter, try to extract a reasonable snippet after the key term
+        matches = re.search(r'(?:^|\w+)\s+([^\.;,\n]{5,50})', context)
+        if matches:
+            return matches.group(1).strip(), 0.5
+            
+        return None, 0.0
+
+    def process_chunk(self, chunk: str, sections: List[str]) -> Dict[str, Dict[str, ExtractionResult]]:
+        """Process a chunk of text to extract information for specified sections"""
+        results = {}
+        
+        for section in sections:
+            if section not in results:
+                results[section] = {}
+                
+            if section in STANDARD_SCHEMA:
+                for field in STANDARD_SCHEMA[section]:
+                    # Extract using context windows
+                    field_results = self.extract_with_context(chunk, section, field)
+                    
+                    # Store the best result (highest confidence)
+                    if field_results:
+                        best_result = max(field_results, key=lambda x: x.confidence)
+                        results[section][field] = best_result
+        
+        return results
+
+    def merge_results(self, results_list: List[Dict[str, Dict[str, ExtractionResult]]]) -> Dict[str, Dict[str, str]]:
+        """Merge results from multiple chunks, selecting the highest confidence results"""
         merged = {}
         
         for section in STANDARD_SCHEMA:
@@ -307,23 +419,33 @@ class AIInsuranceExtractor:
             for field in STANDARD_SCHEMA[section]:
                 merged[section][field] = None
                 
+                best_confidence = 0.0
+                best_value = None
+                
                 for results in results_list:
                     if section in results and field in results[section]:
-                        if results[section][field] is not None:
-                            merged[section][field] = results[section][field]
-                            break
+                        result = results[section][field]
+                        if result and result.confidence > best_confidence:
+                            best_confidence = result.confidence
+                            best_value = result.value
                 
-                if merged[section][field] is None:
-                    if "amount" in field or "maximum" in field:
+                if best_value:
+                    merged[section][field] = best_value
+                else:
+                    format_type = self._determine_format_type(section, field)
+                    if format_type == "money":
                         merged[section][field] = "$0"
-                    elif "percentage" in field or "co_insurance" in field:
+                    elif format_type == "percentage":
                         merged[section][field] = "0%"
+                    elif format_type == "yes_no":
+                        merged[section][field] = "No"
                     else:
                         merged[section][field] = "N/A"
         
         return merged
 
-    def extract_from_pdf(self, pdf_path, progress_callback=None):
+    def extract_from_pdf(self, pdf_path: str, progress_callback=None) -> Dict[str, Dict[str, str]]:
+        """Extract information from PDF using context windows approach"""
         if progress_callback:
             progress_callback(0.1, "Extracting text from PDF...")
             
@@ -332,26 +454,19 @@ class AIInsuranceExtractor:
             return STANDARD_SCHEMA
             
         if progress_callback:
-            progress_callback(0.15, "Using AI to analyze document structure...")
+            progress_callback(0.2, "Chunking text for processing...")
             
-        chunks = self.ai_chunk_text(pdf_text)
+        chunks = self.chunk_text(pdf_text)
         
         if progress_callback:
-            progress_callback(0.2, "Processing with Llama3 (using parallel processing)...")
-        
-        self.chunk_cache = {}
+            progress_callback(0.3, "Processing with context windows...")
         
         all_results = []
         sections = list(STANDARD_SCHEMA.keys())
         
-        tasks = []
-        for i, chunk in enumerate(chunks):
-            chunk_id = f"chunk_{i}"
-            tasks.append((chunk_id, chunk, sections))
-        
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self.process_chunk, chunk_id, chunk, sections): i 
-                      for i, (chunk_id, chunk, sections) in enumerate(tasks)}
+            futures = {executor.submit(self.process_chunk, chunk, sections): i 
+                      for i, chunk in enumerate(chunks)}
             
             completed = 0
             for future in concurrent.futures.as_completed(futures):
@@ -360,136 +475,46 @@ class AIInsuranceExtractor:
                 
                 completed += 1
                 if progress_callback:
-                    progress_pct = 0.2 + 0.7 * (completed / len(tasks))
-                    progress_callback(progress_pct, f"Processing chunk {completed}/{len(tasks)}...")
+                    progress_pct = 0.3 + 0.6 * (completed / len(chunks))
+                    progress_callback(progress_pct, f"Processing chunk {completed}/{len(chunks)}...")
         
         if progress_callback:
-            progress_callback(0.9, "Finalizing results with AI...")
+            progress_callback(0.9, "Merging results...")
             
         final_results = self.merge_results(all_results)
-        
-        # Additional pass to fill in missing values using AI
-        self.fill_missing_with_ai(final_results, pdf_text, progress_callback)
         
         if progress_callback:
             progress_callback(1.0, "Extraction complete!")
             
         return final_results
-    
-    def fill_missing_with_ai(self, results, full_text, progress_callback=None):
-        missing_fields = []
-        
-        for section in results:
-            for field in results[section]:
-                if results[section][field] in ["N/A", "$0", "0%"]:
-                    missing_fields.append((section, field))
-        
-        if not missing_fields:
-            return
-            
-        if progress_callback:
-            progress_callback(0.92, f"Searching for {len(missing_fields)} missing values...")
-            
-        # Take only first 1/3 of missing fields to avoid timeout
-        critical_missing = missing_fields[:len(missing_fields)//3]
-        
-        prompt = """
-        I'm trying to extract specific insurance policy information that wasn't found in the initial pass.
-        For each field below, provide the exact value from the policy if you can find it.
-        If you can't find a value, respond with "NOT_FOUND".
-        
-        Return your answers as a JSON object with section and field names as keys.
-        
-        Fields to find:
-        """
-        
-        for section, field in critical_missing:
-            display_section = section.replace("_", " ").title()
-            display_field = field.replace("_", " ").title()
-            prompt += f"\n- {display_section}: {display_field}"
-            
-        prompt += f"\n\nPolicy text (excerpt):\n{full_text[:10000]}"
-        
-        try:
-            response = requests.post(
-                self.ollama_url,
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                extracted_text = result.get("response", "").strip()
-                
-                try:
-                    # First try to parse the entire text as JSON
-                    extracted_data = json.loads(extracted_text)
-                    
-                    for section in extracted_data:
-                        if section in results:
-                            for field in extracted_data[section]:
-                                if field in results[section]:
-                                    value = extracted_data[section][field]
-                                    if value and value != "NOT_FOUND":
-                                        results[section][field] = value
-                except:
-                    # JSON parsing failed, continue with current results
-                    pass
-                    
-        except Exception as e:
-            # Continue with current results if API call fails
-            pass
 
 
 class StreamlitApp:
     def __init__(self):
-        self.extractor = AIInsuranceExtractor()
+        self.extractor = ContextWindowExtractor()
 
     def run(self):
-        st.title("AI-Powered Insurance Policy Data Extractor")
-        st.write("Extract insurance policy data using Llama3 - No regex, all AI")
+        st.title("Context Window Insurance Policy Data Extractor")
+        st.write("Extract insurance policy data using context windows for more accurate results")
 
         with st.sidebar:
-            st.header("Settings")
-            st.write("Ollama Model: llama3")
-            
             st.header("Instructions")
             st.write("""
-            1. Ensure Ollama is installed and running locally
-            2. Upload an insurance policy PDF
-            3. Wait for extraction to complete
-            4. Review and edit the extracted data
-            5. Export to CSV or JSON
+            1. Upload an insurance policy PDF
+            2. Wait for extraction to complete
+            3. Review and edit the extracted data
+            4. Export to CSV or JSON
             """)
             
-            if st.button("Check Ollama Status"):
-                try:
-                    service_response = requests.get("http://localhost:11434/api/tags")
-                    if service_response.status_code != 200:
-                        st.error("❌ Ollama service is not running. Please start Ollama.")
-                        st.markdown("Installation: [Ollama website](https://ollama.ai/)")
-                        return
-                        
-                    models = service_response.json()
-                    
-                    if "models" in models:
-                        model_list = models.get("models", [])
-                        model_available = any(model.get("name") == "llama3" or model.get("name") == "llama3:latest" for model in model_list)
-                    else:
-                        model_names = [model.get("name", "") for model in models] if isinstance(models, list) else []
-                        model_available = "llama3" in model_names or "llama3:latest" in model_names
-                    
-                    if model_available:
-                        st.success("✅ Ollama is running and llama3 model is loaded!")
-                    else:
-                        st.warning("⚠️ Ollama is running but llama3 model is not loaded.")
-                        st.code("Run this command: ollama pull llama3", language="bash")
-                except Exception as e:
-                    st.error(f"❌ Ollama is not available: {str(e)}")
-                    st.markdown("Installation: [Ollama website](https://ollama.ai/)")
+            st.header("About This Tool")
+            st.write("""
+            This tool uses a context window approach to extract insurance policy details:
+            
+            - Searches for key terms in the policy document
+            - Analyzes surrounding text to find relevant values
+            - Applies specialized extraction based on field type
+            - Assigns confidence scores to extraction results
+            """)
 
         if "step" not in st.session_state:
             st.session_state.step = "upload"
@@ -660,7 +685,7 @@ class StreamlitApp:
 
 def main():
     st.set_page_config(
-        page_title="AI-Powered Insurance Extractor",
+        page_title="Context Window Insurance Extractor",
         page_icon="📋",
         layout="wide"
     )
