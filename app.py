@@ -895,25 +895,81 @@ def extract_values(chunks_with_scores, category, field):
             },
         ],
         "Company Name": [
-             {"pattern": r'(?:insurer|insurance\s*company|carrier)[^:]*:\s*([A-Z][A-Za-z\s&.,\']+)', "priority": 4, "format": "text"},
-    {"pattern": r'(?:underwritten|issued)\s*by[^:]*:\s*([A-Z][A-Za-z\s&.,\']+)', "priority": 3, "format": "text"},
-    # Add these new patterns
-    {"pattern": r'([A-Z][A-Za-z\s\.,\']+(?:Inc\.|LLC|Ltd\.|Corporation|Company|Co\.))', "priority": 4, "format": "text"},
-    {"pattern": r'([A-Z][A-Za-z\s]+(?:Insurance|Life|Financial)(?:\s[A-Za-z\s]+)?)', "priority": 4, "format": "text"},
-    {"pattern": r'(?:your plan sponsor|sponsored by)\s+([A-Z][A-Za-z\s\.,\']+)', "priority": 5, "format": "text"},
-    {"pattern": r'^([A-Z][A-Za-z\s\.,\']+(?:Inc\.|LLC|Ltd\.))\s+(?:is|has|Plan)', "priority": 5, "format": "text"},
-    {"pattern": r'(?:from|by|with)\s+([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){0,3})', "priority": 3, "format": "text"},
-    {"pattern": r'selected\s+([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){0,3})', "priority": 5, "format": "text"},
+            {
+                "pattern": r"(?:insurer|insurance\s*company|carrier)[^:]*:\s*([A-Z][A-Za-z\s&.,\']+)",
+                "priority": 4,
+                "format": "text",
+            },
+            {
+                "pattern": r"(?:underwritten|issued)\s*by[^:]*:\s*([A-Z][A-Za-z\s&.,\']+)",
+                "priority": 3,
+                "format": "text",
+            },
+            # Add these new patterns
+            {
+                "pattern": r"([A-Z][A-Za-z\s\.,\']+(?:Inc\.|LLC|Ltd\.|Corporation|Company|Co\.))",
+                "priority": 4,
+                "format": "text",
+            },
+            {
+                "pattern": r"([A-Z][A-Za-z\s]+(?:Insurance|Life|Financial)(?:\s[A-Za-z\s]+)?)",
+                "priority": 4,
+                "format": "text",
+            },
+            {
+                "pattern": r"(?:your plan sponsor|sponsored by)\s+([A-Z][A-Za-z\s\.,\']+)",
+                "priority": 5,
+                "format": "text",
+            },
+            {
+                "pattern": r"^([A-Z][A-Za-z\s\.,\']+(?:Inc\.|LLC|Ltd\.))\s+(?:is|has|Plan)",
+                "priority": 5,
+                "format": "text",
+            },
+            {
+                "pattern": r"(?:from|by|with)\s+([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){0,3})",
+                "priority": 3,
+                "format": "text",
+            },
+            {
+                "pattern": r"selected\s+([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){0,3})",
+                "priority": 5,
+                "format": "text",
+            },
         ],
         "Policy Number": [
-       {"pattern": r'policy\s*(?:number|no|#)[\s:]+([A-Z0-9][\w\-\.\/]{3,20})', "priority": 4, "format": "text"},
-    {"pattern": r'certificate\s*(?:number|no|#)[\s:]+([A-Z0-9][\w\-\.\/]{3,20})', "priority": 3, "format": "text"},
-    # Add these new patterns
-    {"pattern": r'Plan\s*Number:?\s*([A-Z0-9][\w\-\.\/]{3,20})', "priority": 5, "format": "text"},
-    {"pattern": r'(?:Group|Contract|Plan|Policy)\s*(?:Number|No\.|#)?\s*:?\s*([A-Z0-9][\w\-\.\/]{3,20})', "priority": 4, "format": "text"},
-    {"pattern": r'(?:Group|Contract|Plan|Policy)\s*(?:Number|No\.|#)?\s*:?\s*([0-9]{5,7})', "priority": 4, "format": "text"},
-    {"pattern": r'([G][0-9]{5,10})', "priority": 3, "format": "text"},
-    {"pattern": r'(?:number|no|#)\s*([0-9]{5,7})', "priority": 3, "format": "text"},
+            {
+                "pattern": r"policy\s*(?:number|no|#)[\s:]+([A-Z0-9][\w\-\.\/]{3,20})",
+                "priority": 4,
+                "format": "text",
+            },
+            {
+                "pattern": r"certificate\s*(?:number|no|#)[\s:]+([A-Z0-9][\w\-\.\/]{3,20})",
+                "priority": 3,
+                "format": "text",
+            },
+            # Add these new patterns
+            {
+                "pattern": r"Plan\s*Number:?\s*([A-Z0-9][\w\-\.\/]{3,20})",
+                "priority": 5,
+                "format": "text",
+            },
+            {
+                "pattern": r"(?:Group|Contract|Plan|Policy)\s*(?:Number|No\.|#)?\s*:?\s*([A-Z0-9][\w\-\.\/]{3,20})",
+                "priority": 4,
+                "format": "text",
+            },
+            {
+                "pattern": r"(?:Group|Contract|Plan|Policy)\s*(?:Number|No\.|#)?\s*:?\s*([0-9]{5,7})",
+                "priority": 4,
+                "format": "text",
+            },
+            {"pattern": r"([G][0-9]{5,10})", "priority": 3, "format": "text"},
+            {
+                "pattern": r"(?:number|no|#)\s*([0-9]{5,7})",
+                "priority": 3,
+                "format": "text",
+            },
         ],
         "Deductibles": [
             {
@@ -1134,8 +1190,9 @@ def extract_values(chunks_with_scores, category, field):
                         # Validate the value
                         if is_valid_value(standardized_value, field, category):
                             results.append(
-                                (standardized_value, final_score, original_value)
+                                (standardized_value, final_score, original_value, chunk)
                             )
+
             except Exception:
                 continue
 
@@ -1144,7 +1201,7 @@ def extract_values(chunks_with_scores, category, field):
 
     # Remove duplicates, keeping highest score
     unique_values = {}
-    for formatted_value, score, original_value in results:
+    for formatted_value, score, original_value, source in results:
         if (
             formatted_value not in unique_values
             or score > unique_values[formatted_value]["score"]
@@ -1152,12 +1209,13 @@ def extract_values(chunks_with_scores, category, field):
             unique_values[formatted_value] = {
                 "score": score,
                 "original": original_value,
+                "source": source
             }
+    
+    return [(value, data["score"], data["original"], data["source"]) 
+            for value, data in unique_values.items()]
 
-    return [
-        (value, data["score"], data["original"])
-        for value, data in unique_values.items()
-    ]
+
 
 
 # Generate comprehensive field queries
@@ -1322,11 +1380,15 @@ def apply_cross_field_validation(extracted_values):
         ),
     ]
 
+   
     # Apply field relation rules
     for relation in field_relations:
         source_path, target_path, rule_func = relation
-
         source_category, source_field = source_path.split(",")
+
+        # Skip if category is "sources"
+        if source_category == "sources":
+            continue
 
         if (
             source_category in extracted_values
@@ -1337,17 +1399,24 @@ def apply_cross_field_validation(extracted_values):
             if target_path:
                 target_category, target_field = target_path.split(",")
 
+                # Skip if category is "sources"
+                if target_category == "sources":
+                    continue
+
                 if (
                     target_category in extracted_values
                     and target_field in extracted_values[target_category]
                 ):
                     target_value = extracted_values[target_category][target_field]
-
                     new_target_value = rule_func(source_value, target_value)
                     extracted_values[target_category][target_field] = new_target_value
 
     # Apply standard formatting to all fields
-    for category in extracted_values:
+    for category in list(extracted_values.keys()):
+        # Skip the sources dictionary
+        if category == "sources":
+            continue
+            
         for field in extracted_values[category]:
             value = extracted_values[category][field]
 
@@ -1358,7 +1427,6 @@ def apply_cross_field_validation(extracted_values):
             extracted_values[category][field] = standardized_value
 
     return extracted_values
-
 
 # Main extraction function
 def extract_insurance_data(text, page_texts, document_hash):
@@ -1459,6 +1527,14 @@ def extract_insurance_data(text, page_texts, document_hash):
             for field in INSURANCE_SCHEMA[category]:
                 extracted_values[category][field] = "Not Found"
 
+        # Add sources dictionary to store source information
+        extracted_values["sources"] = {}
+        for category in INSURANCE_SCHEMA:
+            extracted_values["sources"][category] = {}
+            for field in INSURANCE_SCHEMA[category]:
+                extracted_values["sources"][category][field] = ""
+
+
         # Extract where we have results
         for category in organized_results:
             for field in organized_results[category]:
@@ -1469,9 +1545,11 @@ def extract_insurance_data(text, page_texts, document_hash):
                     values = extract_values(chunks_with_scores, category, field)
 
                     if values:
-                        # Take the most likely value (highest similarity score)
-                        best_value = values[0][0]
+        # Take the most likely value (highest similarity score)
+                        best_value, best_score, original_value, source_chunk = values[0]
                         extracted_values[category][field] = best_value
+                        # Store the source chunk for this field
+                        extracted_values["sources"][category][field] = source_chunk
                 except Exception as e:
                     st.warning(f"Error extracting {field} in {category}: {e}")
 
@@ -1616,11 +1694,11 @@ def main():
     with st.sidebar:
         st.subheader("About")
         st.write("This app extracts standardized data from insurance policy PDFs.")
-        st.write("Features:")
-        st.write("- Semantic vector search")
-        st.write("- Consistent output structure")
-        st.write("- Standardized field formatting")
-        st.write("- Unified extraction approach")
+        st.write("How to use:")
+        st.write("- Upload an insurance policy PDF")
+        st.write("- Wait for extracted data using semantic search")
+        st.write("- Finalize data and review into a standardized field formatting")
+        st.write("- Download data in CSV, JSON, or Excel format for further use")
 
     # Main tabs
     tab1, tab2 = st.tabs(["Extract Data", "About"])
@@ -1639,7 +1717,9 @@ def main():
 
             if pdf_text:
                 st.success("PDF processed successfully")
-
+                # Add scrollable text area for full PDF content
+                with st.expander("View Full PDF Text"):
+                    st.text_area("PDF Content", pdf_text, height=400)
                 st.info(
                     "All data will be extracted into a unified, standardized format using semantic search."
                 )
@@ -1716,8 +1796,30 @@ def main():
                                             category
                                         ][field]
 
+                                    # These lines need to be indented to be inside the field loop
+                                    # Notice they are NOT indented correctly in your code
                                     field_key = f"{category}_{field}"
                                     st.text_input(field, value=value, key=field_key)
+                                    
+                                    has_source = (
+                                        "sources" in st.session_state.extracted_data
+                                        and category in st.session_state.extracted_data["sources"]
+                                        and field in st.session_state.extracted_data["sources"][category]
+                                        and st.session_state.extracted_data["sources"][category][field]
+                                        and value != "Not Found"
+                                    )
+                                    
+                                    if has_source:
+                                        with st.expander("View Source"):
+                                            source_chunk = st.session_state.extracted_data["sources"][category][field]
+                                            st.text_area(
+                                                "Source Text", 
+                                                source_chunk, 
+                                                height=150, 
+                                                key=f"source_{field_key}",
+                                                disabled=True
+                                            )
+
 
                         # Submit and feedback options
                         col1, col2 = st.columns(2)
@@ -1725,7 +1827,8 @@ def main():
                             submitted = st.form_submit_button("Save Changes")
                         with col2:
                             collect_feedback = st.checkbox(
-                                "Submit corrections as feedback for model to learn from", value=True
+                                "Submit corrections as feedback for model to learn from",
+                                value=True,
                             )
 
                         if submitted:
@@ -1898,30 +2001,7 @@ def main():
         st.write("- Ages: 'Age 65'")
         st.write("- Time periods: '90 days', '24 months'")
 
-        st.expander("FAQ").write(
-            """
-        Q: How does this tool work without carrier detection?
-        A: It uses semantic vector search to understand the meaning of policy text, rather than relying on carrier-specific patterns.
-        
-        Q: Why standardize the output format?
-        A: Standardized output makes it easier to compare policies, analyze data, and integrate with other systems.
-        
-        Q: What if a field isn't found?
-        A: The field will still appear in the output as "Not Found" to maintain the consistent structure.
-        
-        Q: How accurate is the extraction?
-        A: Accuracy depends on the document quality and formatting, but the semantic approach works well across different policy types.
-        """
-        )
-
-        st.expander("Export Formats").write(
-            """
-        CSV: Flattened view with Category, Field, Value columns
-        JSON: Hierarchical structure with nested categories and fields
-        Excel: Multiple sheets with summary and category-specific pages
-        """
-        )
-
+   
 
 if __name__ == "__main__":
     try:
