@@ -15,15 +15,12 @@ import datetime
 import hashlib
 import io
 
-# Set page title
 st.set_page_config(page_title="Insurance Policy Data Extractor", layout="wide")
 
-# Constants and Configuration
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(CACHE_DIR, exist_ok=True)
 FEEDBACK_DB_PATH = os.path.join(CACHE_DIR, "feedback_db.pkl")
 
-# Define consistent schema for all insurance policies
 INSURANCE_SCHEMA = {
     "General Information": ["Company Name", "Policy Number"],
     "Benefit Summary": [
@@ -1584,9 +1581,7 @@ def extract_insurance_data(text, page_texts, document_hash):
                             extracted_values[category][field] = corrected_values[
                                 category
                             ][field]
-                            st.info(
-                                f"Applied correction to {category} - {field} based on previous feedback"
-                            )
+                          
 
         # Store document hash for feedback
         st.session_state.document_hash = document_hash
@@ -1594,7 +1589,6 @@ def extract_insurance_data(text, page_texts, document_hash):
 
         return extracted_values
     except Exception as e:
-        st.error(f"Error in data extraction: {e}")
         import traceback
 
         st.error(traceback.format_exc())
@@ -1720,10 +1714,7 @@ def main():
                 # Add scrollable text area for full PDF content
                 with st.expander("View Full PDF Text"):
                     st.text_area("PDF Content", pdf_text, height=400)
-                st.info(
-                    "All data will be extracted into a unified, standardized format using semantic search."
-                )
-
+              
                 if st.button("Extract Policy Data", type="primary"):
                     with st.spinner("Extracting data with semantic search..."):
                         extracted_data = extract_insurance_data(
@@ -1769,11 +1760,7 @@ def main():
                         found_fields / total_fields * 100 if total_fields > 0 else 0
                     )
 
-                    st.write(
-                        f"Extraction: {found_fields}/{total_fields} fields ({confidence:.1f}%)"
-                    )
-                    st.write("Format: Standardized structure with consistent fields")
-
+                 
                     # Editor
                     with st.form("edit_form"):
                         # Use tabs for categories
@@ -1949,32 +1936,10 @@ def main():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             )
 
-                    # Data summary
-                    st.subheader("Data Structure")
-
-                    # Display in columns
-                    col1, col2, col3 = st.columns(3)
-
-                    categories = list(INSURANCE_SCHEMA.keys())
-                    cats_per_col = len(categories) // 3 + (
-                        1 if len(categories) % 3 > 0 else 0
-                    )
-
-                    for i, col in enumerate([col1, col2, col3]):
-                        start_idx = i * cats_per_col
-                        end_idx = min(start_idx + cats_per_col, len(categories))
-
-                        with col:
-                            for category in categories[start_idx:end_idx]:
-                                st.write(f"**{category}**")
-                                for field in INSURANCE_SCHEMA[category]:
-                                    value = export_data[category][field]
-                                    mark = "✓" if value != "Not Found" else ""
-                                    st.write(f"- {field} {mark}")
+                    
             else:
                 st.error("Failed to process PDF")
 
-        st.info("Every uploaded PDF produces the same standardized data structure")
 
     with tab2:
         st.subheader("About This Extractor")
