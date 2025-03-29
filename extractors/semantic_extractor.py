@@ -30,6 +30,8 @@ class SemanticExtractor:
         self.document_hash = document_hash
         self.doc_structure = DocumentStructure(text, page_texts)
         self.structure_info = self.doc_structure.structure_info
+
+    
         
     def extract_data(self):
         """
