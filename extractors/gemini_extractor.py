@@ -6,10 +6,7 @@ from config import INSURANCE_SCHEMA, SCHEMA_DESCRIPTION, EXAMPLE_SCHEMA
 
 
 class GeminiFlashExtractor:
-    """
-    Dead simple insurance policy data extractor using Google's Gemini 2.0 Flash model
-    """
-    
+ 
     def __init__(self):
         """Initialize the Gemini extractor with API key from environment variable"""
         api_key = os.environ.get('GEMINI_API_KEY')
@@ -21,11 +18,9 @@ class GeminiFlashExtractor:
         # Use the correct model name for Gemini 2.0 Flash
         self.model_name = 'gemini-2.0-flash'
         self.model = genai.GenerativeModel(self.model_name)
-        st.info(f"Using {self.model_name} for extraction")
         
     def extract_data(self, text, page_texts, document_hash):
         """Extract structured data from insurance policy text - simplest possible version"""
-        st.write("Sending document to Gemini 2.0 Flash...")
         
         # Build the simple prompt with the schema and example
         import json
@@ -50,8 +45,10 @@ class GeminiFlashExtractor:
         {example_json}
         
         Follow this example and schema format closely but with the data you receive in this document. Return ONLY THE JSON with the extracted data. 
-        For missing fields use "none" or "$0" for monetary values.
-        Make sure to keep the exact nested structure shown in the schema and example and only output that.
+        FOR MISSING FIELDS: use "none" or "$0" for monetary values. Do not say "N/A" or "not applicable" or nill or null.
+        Make sure to keep the exact nested structure shown in the schema and example and only output that. 
+        
+        If the policy states values, use those actual values instead of the text. Like if it says waiting period for some benefits, say the actual number of days instead of "waiting period may apply".
         
         Here is the most important part of this promptm, the insurnace policy document to perform the extraction on:
         {text}
