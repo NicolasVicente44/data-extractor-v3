@@ -16,14 +16,29 @@ def get_csv_download(data, filename="insurance_data.csv"):
         tuple: (csv_data, filename) or (None, None) on error
     """
     try:
-        # Convert to DataFrame
+        # Convert to DataFrame with flattened structure
         rows = []
-        for category in INSURANCE_SCHEMA:
-            for field in INSURANCE_SCHEMA[category]:
-                value = "Not Found"
-                if category in data and field in data[category]:
-                    value = data[category][field]
-                rows.append({"Category": category, "Field": field, "Value": value})
+        
+        # Process top-level fields
+        for key in data:
+            if key == "sources":
+                continue
+                
+            if isinstance(data[key], dict):
+                # Process nested fields
+                for subkey, value in data[key].items():
+                    rows.append({
+                        "Category": key,
+                        "Field": subkey,
+                        "Value": value
+                    })
+            else:
+                # Process non-nested fields
+                rows.append({
+                    "Category": "",
+                    "Field": key,
+                    "Value": data[key]
+                })
 
         df = pd.DataFrame(rows)
 
@@ -40,25 +55,21 @@ def get_json_download(data, filename="insurance_data.json"):
     Generate a JSON file containing extracted insurance data
     
     Args:
-        data: Dictionary of extracted values by category and field
+        data: Dictionary of extracted values
         filename: Name of the JSON file
         
     Returns:
         tuple: (json_data, filename) or (None, None) on error
     """
     try:
-        # Ensure consistent structure
-        structured_data = {}
-        for category in INSURANCE_SCHEMA:
-            structured_data[category] = {}
-            for field in INSURANCE_SCHEMA[category]:
-                value = "Not Found"
-                if category in data and field in data[category]:
-                    value = data[category][field]
-                structured_data[category][field] = value
+        # Create a clean copy without sources
+        clean_data = {}
+        for key, value in data.items():
+            if key != "sources":
+                clean_data[key] = value
 
         # Convert to JSON
-        json_str = json.dumps(structured_data, indent=4).encode("utf-8")
+        json_str = json.dumps(clean_data, indent=4).encode("utf-8")
         return json_str, filename
     except Exception as e:
         st.error(f"Error generating JSON: {e}")
@@ -70,7 +81,7 @@ def get_excel_download(data, filename="insurance_data.xlsx"):
     Generate an Excel file containing extracted insurance data
     
     Args:
-        data: Dictionary of extracted values by category and field
+        data: Dictionary of extracted values
         filename: Name of the Excel file
         
     Returns:
@@ -81,31 +92,42 @@ def get_excel_download(data, filename="insurance_data.xlsx"):
         buffer = io.BytesIO()
 
         with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            # Summary sheet
-            summary_rows = []
-            for category in INSURANCE_SCHEMA:
-                for field in INSURANCE_SCHEMA[category]:
-                    value = "Not Found"
-                    if category in data and field in data[category]:
-                        value = data[category][field]
-                    summary_rows.append(
-                        {"Category": category, "Field": field, "Value": value}
-                    )
-
-            summary_df = pd.DataFrame(summary_rows)
+            # Create summary sheet with flattened data
+            rows = []
+            for key in data:
+                if key == "sources":
+                    continue
+                    
+                if isinstance(data[key], dict):
+                    for subkey, value in data[key].items():
+                        rows.append({
+                            "Category": key,
+                            "Field": subkey,
+                            "Value": value
+                        })
+                else:
+                    rows.append({
+                        "Category": "",
+                        "Field": key,
+                        "Value": data[key]
+                    })
+            
+            summary_df = pd.DataFrame(rows)
             summary_df.to_excel(writer, sheet_name="Summary", index=False)
-
-            # Category sheets
-            for category in INSURANCE_SCHEMA:
+            
+            # Create sheets for each category
+            categories = [k for k in data.keys() if isinstance(data[k], dict) and k != "sources"]
+            for category in categories:
                 category_rows = []
-                for field in INSURANCE_SCHEMA[category]:
-                    value = "Not Found"
-                    if category in data and field in data[category]:
-                        value = data[category][field]
-                    category_rows.append({"Field": field, "Value": value})
-
+                for field, value in data[category].items():
+                    category_rows.append({
+                        "Field": field,
+                        "Value": value
+                    })
+                    
                 category_df = pd.DataFrame(category_rows)
-                sheet_name = category[:31]  # Excel limit
+                # Excel sheet names limited to 31 characters
+                sheet_name = category[:31]
                 category_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
         buffer.seek(0)

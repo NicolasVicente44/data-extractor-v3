@@ -1,76 +1,4 @@
-import os
-
-# Directory configuration
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = os.path.join(BASE_DIR, "data")
-FEEDBACK_DB_PATH = os.path.join(CACHE_DIR, "feedback_db.pkl")
-
-# New Insurance Schema based on provided JSON
-INSURANCE_SCHEMA = {
-    "Company Name": "",
-    "Policy #": "",
-    "General Provisions": {
-        "Eligibility Period": "",
-        "Definition of Salary": "",
-        "Child Coverage - Under Age": "",
-        "Student Extension - Under Age": ""
-    },
-    "Life Insurance and A.D. & D.": {
-        "Benefit Amount - Life insurance": "$0",
-        "Non-evidence Maximum": "$0",
-        "Overall Maximum": "$0",
-        "Reduction Schedule": "",
-        "Termination Age": ""
-    },
-    "Optional Life Insurance": {
-        "Benefit Amount - Life insurance": "$0",
-        "Non-evidence Maximum": "$0",
-        "Overall Maximum": "$0",
-        "Termination Age": ""
-    },
-    "Dependent Life Insurance": {
-        "Spouse Amount/Child Amount": "$0",
-        "Children Covered from Age": "",
-        "Termination Age": ""
-    },
-    "Short Term Disability": {
-        "Benefit Amount": "$0",
-        "Non-evidence Maximum": "$0",
-        "Overall Maximum": "$0",
-        "Waiting Period - Accident/Sickness/Hospitalization": "",
-        "Maximum Benefit Period": "",
-        "Termination Age": "",
-        "Taxability of Benefits": ""
-    },
-    "Long Term Disability": {
-        "Benefit Amount": "$0",
-        "Non-evidence Maximum": "$0",
-        "Overall Maximum": "$0",
-        "Waiting Period": "",
-        "Definition of Disability": "",
-        "Maximum Benefit Period": "",
-        "COLA": "",
-        "Termination Age": "",
-        "Taxability of Benefits": ""
-    },
-    "Critical Illness": {
-        "Benefit Amount": "$0",
-        "Covered Conditions": "",
-        "Multi Occurrence": "",
-        "Dependent Coverage": "",
-        "Termination Age": ""
-    },
-    "Health Care": {
-        "Preferred Provider Arrangement": "",
-        "Deductible - Drugs/Dispensing Fee Cap": "$0",
-        "Deductible - Other Health Care": "$0",
-        "Co-insurance - Drugs/Prof. Services/Other Health Care": "",
-        "Drug Coverage": ""
-    }
-}
-
-# Schema description for Gemini prompt (more detailed)
-SCHEMA_DESCRIPTION = {
+{
     "Company Name": "Name of the insurance provider or employer offering the policy. Format: String. If unavailable, use 'none'.",
     "Policy #": "Unique identifier for the insurance policy. Format: Alphanumeric string. If unavailable, use 'none'.",
     "General Provisions": {
@@ -131,4 +59,5 @@ SCHEMA_DESCRIPTION = {
       "Co-insurance - Drugs/Prof. Services/Other Health Care": "Percentage covered by insurance. Format: Numeric percentage (e.g., '80%'). If unavailable, use 'none'.",
       "Drug Coverage": "Description of drug coverage. Format: String. If unavailable, use 'none'."
     }
-}
+  }
+  

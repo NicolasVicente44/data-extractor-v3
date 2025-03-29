@@ -57,45 +57,40 @@ def save_feedback(document_hash, original_values, corrected_values):
         return False
 
 
-def apply_feedback_learning(extracted_values, document_hash):
+def apply_feedback(document_hash, extracted_values):
     """
     Apply previous feedback to improve extraction results
     
     Args:
-        extracted_values: Dictionary of extracted values
-        document_hash: Hash of the current document
+        document_hash: Hash of the document
+        extracted_values: Current extraction results
         
     Returns:
-        dict: Updated extracted values
+        dict: Updated extraction results
     """
     feedback_db = load_feedback_db()
     
-    if document_hash in feedback_db:
+    if document_hash in feedback_db and feedback_db[document_hash]:
+        # Get the most recent feedback
         latest_feedback = feedback_db[document_hash][-1]
         original_values = latest_feedback["original_values"]
         corrected_values = latest_feedback["corrected_values"]
-
-        for category in corrected_values:
-            if category not in extracted_values:
+        
+        # Apply corrections
+        for key in corrected_values:
+            if key not in extracted_values or key == "sources":
                 continue
-
-            for field in corrected_values[category]:
-                if field not in extracted_values[category]:
-                    continue
-
-                if (
-                    category in original_values
-                    and field in original_values[category]
-                    and original_values[category][field]
-                    != corrected_values[category][field]
-                ):
-
-                    if (
-                        extracted_values[category][field]
-                        == original_values[category][field]
-                    ):
-                        extracted_values[category][field] = corrected_values[
-                            category
-                        ][field]
+                
+            if isinstance(corrected_values[key], dict):
+                # Handle nested fields
+                for subkey, value in corrected_values[key].items():
+                    if subkey in extracted_values[key]:
+                        # Only apply correction if the current value matches the original value that was corrected
+                        if key in original_values and subkey in original_values[key] and extracted_values[key][subkey] == original_values[key][subkey]:
+                            extracted_values[key][subkey] = value
+            else:
+                # Handle top-level fields
+                if key in original_values and extracted_values[key] == original_values[key]:
+                    extracted_values[key] = corrected_values[key]
     
     return extracted_values
