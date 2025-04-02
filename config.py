@@ -71,7 +71,7 @@ INSURANCE_SCHEMA = {
 
 # Schema description for Gemini prompt (more detailed)
 SCHEMA_DESCRIPTION = {
-    "Company Name": "Name of the insurance provider or employer offering the policy. Format: String. If unavailable, use 'none'.",
+    "Company Name": "Name of the company or employer offering the policy. It is not the insurance provider name, usually in the first few pages of the policy. Format: String. If unavailable, use 'none'.",
     "Policy #": "Unique identifier for the insurance policy. Format: Alphanumeric string. If unavailable, use 'none'.",
     "General Provisions": {
       "Eligibility Period": "Timeframe before an individual becomes eligible for coverage. Format: Numeric value with units (e.g., '30 days'). If unavailable, use 'none'.",
