@@ -211,15 +211,26 @@ def main():
                     
                     st.success("Changes saved!")
             
-            # Export section
+                # Export section
             if st.session_state.edited_data:
-                st.subheader("Export Structured Data")
-                
+                st.subheader("Structured Data Output Preview")
+
+                # CSV output - closed by default
+                with st.expander("CSV Output", expanded=False):
+                    df = create_csv_view(st.session_state.edited_data)
+                    st.dataframe(df)
+
+                # JSON output - closed by default
+                with st.expander("JSON Output", expanded=False):
+                    formatted_json = json.dumps(st.session_state.edited_data, indent=2)
+                    st.code(formatted_json, language="json")
+
                 # Create timestamp for filenames
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                
+
+                st.subheader("Export Structured Data")
                 col1, col2 = st.columns(2)
-                
+
                 # JSON export button
                 with col1:
                     json_filename = f"insurance_data_{timestamp}.json"
@@ -229,25 +240,8 @@ def main():
                         data=json_data,
                         file_name=json_name,
                         mime="application/json"
-                )
-                
-                                
-                # Display outputs at the end (closed by default)
-                st.subheader("Structured Data Output Preview")
-                
-                # CSV output - closed by default
-                with st.expander("CSV Output", expanded=False):
-                    # Create CSV view from current session state - include all fields
-                    df = create_csv_view(st.session_state.edited_data)
-                    st.dataframe(df)
-                    
-                        # JSON output - closed by default
-                with st.expander("JSON Output", expanded=False):
-                    # Format the JSON with indentation for better readability
-                    formatted_json = json.dumps(st.session_state.edited_data, indent=2)
-                    st.code(formatted_json, language="json")
-                    
-                
+                    )
+
                 # CSV export button
                 with col2:
                     csv_filename = f"insurance_data_{timestamp}.csv"
@@ -259,6 +253,9 @@ def main():
                         mime="text/csv"
                     )
 
+ 
+                
+ 
     elif uploaded_file and not os.environ.get('GEMINI_API_KEY'):
         st.error("Model API Key is missing. Please set the GEMINI_API_KEY environment variable.")
 
